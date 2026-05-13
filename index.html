@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>ESV Grein | Automatischer Kehrenwechsel nach einem Punkteeintrag</title>
+    <title>ESV Grein | Farbige Kehren-Anzeige + Uhrzeit</title>
     <style>
         * {
             margin: 0;
@@ -123,6 +123,16 @@
             padding: 4px 10px;
             border-radius: 40px;
             border: 1px solid #e0ecd6;
+            transition: background 0.1s;
+        }
+        /* Farbige Hintergründe für Kehren */
+        .kehre-row.current-kehre-bg {
+            background: #c8e6c9 !important;  /* hellgrün für aktuelle Kehre */
+            border-left: 4px solid #2e7d32;
+        }
+        .kehre-row.played-kehre-bg {
+            background: #ffcdd2 !important;  /* hellrot für bereits gespielte Kehren */
+            border-left: 4px solid #c62828;
         }
         .kehre-nr {
             font-weight: 800;
@@ -177,18 +187,35 @@
             overflow-y: auto;
         }
 
-        .timer-area {
+        /* Timer + Uhrzeit nebeneinander */
+        .timer-row {
             display: flex;
             justify-content: center;
+            gap: 20px;
             margin-bottom: 20px;
+            flex-wrap: wrap;
         }
-        .timer-card {
+        .timer-card, .clock-card {
             background: #1e2a1e;
             border-radius: 70px;
             padding: 10px 28px;
             text-align: center;
-            min-width: 280px;
             box-shadow: 0 6px 14px rgba(0,0,0,0.2);
+        }
+        .clock-card {
+            background: #2c3e2c;
+        }
+        .clock-label {
+            font-size: 0.65rem;
+            color: #b8cfaa;
+            letter-spacing: 1px;
+        }
+        .clock-digits {
+            font-family: 'Courier New', monospace;
+            font-size: 1.8rem;
+            font-weight: 800;
+            color: #f5ffd3;
+            letter-spacing: 2px;
         }
         .timer-digits {
             font-family: 'Courier New', monospace;
@@ -395,7 +422,12 @@
     </div>
 
     <div class="center-hero">
-        <div class="timer-area">
+        <!-- Timer + Uhrzeit nebeneinander -->
+        <div class="timer-row">
+            <div class="clock-card">
+                <div class="clock-label">🕐 AKTUELLE ZEIT</div>
+                <div class="clock-digits" id="currentClock">--:--:--</div>
+            </div>
             <div class="timer-card">
                 <div class="timer-digits" id="timerDisplay">00:00:00</div>
                 <div class="timer-controls">
@@ -461,6 +493,9 @@
     let timerRunning = true;
     let pausedElapsed = 0;
 
+    // Uhrzeit-Intervall
+    let clockInterval = null;
+
     // DOM Elemente
     const centerTeamA = document.getElementById('centerTeamA');
     const centerTeamB = document.getElementById('centerTeamB');
@@ -474,55 +509,95 @@
     const globalWinnerMsgDiv = document.getElementById('globalWinnerMsg');
     const lockInfoMitte = document.getElementById('lockInfoMitte');
     const timerDisplay = document.getElementById('timerDisplay');
+    const currentClockSpan = document.getElementById('currentClock');
 
     const sum = arr => arr.reduce((a,b)=>a+b,0);
 
-    // Ermittelt die aktuell zu spielende Kehre (die erste Kehre, die noch keinen Punkteeintrag hat)
-    // Da nur EINE Mannschaft pro Kehre punkten kann, reicht es zu prüfen, ob Team A ODER Team B bereits Punkte hat
-    function getCurrentKehre() {
-        if (overallWinner) return "🏆";
-        // Finde die erste Kehre, in der noch kein Team Punkte hat
+    // ----- Aktuelle Uhrzeit (aktualisiert jede Sekunde) -----
+    function updateClock() {
+        const now = new Date();
+        const hours = now.getHours().toString().padStart(2, '0');
+        const minutes = now.getMinutes().toString().padStart(2, '0');
+        const seconds = now.getSeconds().toString().padStart(2, '0');
+        currentClockSpan.innerText = `${hours}:${minutes}:${seconds}`;
+    }
+    function startClock() {
+        updateClock();
+        if (clockInterval) clearInterval(clockInterval);
+        clockInterval = setInterval(updateClock, 1000);
+    }
+
+    // ----- Farbige Kehren-Hintergründe -----
+    function updateKehrenColors() {
+        const currentKehreNum = getCurrentKehreNum();
+        // Linke Spalte (Team A)
+        const leftRows = document.querySelectorAll('#leftKehrenPanel .kehre-row');
+        // Rechte Spalte (Team B)
+        const rightRows = document.querySelectorAll('#rightKehrenPanel .kehre-row');
+        
+        for (let i = 0; i < leftRows.length; i++) {
+            const kehreIndex = i + 1;
+            leftRows[i].classList.remove('current-kehre-bg', 'played-kehre-bg');
+            rightRows[i].classList.remove('current-kehre-bg', 'played-kehre-bg');
+            
+            if (overallWinner) {
+                // bei Spielende keine besonderen Farben
+                continue;
+            }
+            
+            if (kehreIndex === currentKehreNum) {
+                // Aktuelle Kehre: hellgrün
+                leftRows[i].classList.add('current-kehre-bg');
+                rightRows[i].classList.add('current-kehre-bg');
+            } else if (kehreIndex < currentKehreNum) {
+                // Bereits gespielte Kehren: hellrot
+                leftRows[i].classList.add('played-kehre-bg');
+                rightRows[i].classList.add('played-kehre-bg');
+            }
+            // Zukünftige Kehren: bleiben weiß (keine Klasse)
+        }
+    }
+
+    // Ermittelt die aktuell zu spielende Kehre (1-basiert)
+    function getCurrentKehreNum() {
+        if (overallWinner) return anzahlKehren;
         for (let i = 0; i < anzahlKehren; i++) {
             if (teamAPunkte[i] === 0 && teamBPunkte[i] === 0) {
                 return i + 1;
             }
         }
-        // Alle Kehren wurden gespielt
         return anzahlKehren;
     }
 
     function updateKehreDisplay() {
         if (overallWinner) {
             currentKehreSpan.innerText = "🏆";
+            updateKehrenColors();
             return;
         }
-        const current = getCurrentKehre();
+        const current = getCurrentKehreNum();
         currentKehreSpan.innerText = current;
         
-        // Wenn alle Kehren gespielt sind, zeige eine Nachricht an
-        if (current === anzahlKehren && teamAPunkte[anzahlKehren-1] !== 0 || teamBPunkte[anzahlKehren-1] !== 0) {
-            // Prüfe ob wirklich alle voll sind
-            let allFilled = true;
-            for (let i = 0; i < anzahlKehren; i++) {
-                if (teamAPunkte[i] === 0 && teamBPunkte[i] === 0) {
-                    allFilled = false;
-                    break;
-                }
+        // Prüfe ob alle Kehren gespielt sind
+        let allFilled = true;
+        for (let i = 0; i < anzahlKehren; i++) {
+            if (teamAPunkte[i] === 0 && teamBPunkte[i] === 0) {
+                allFilled = false;
+                break;
             }
-            if (allFilled && !overallWinner) {
-                // Zeige Hinweis, dass alle Kehren gespielt sind
-                const msgDiv = document.getElementById('globalWinnerMsg');
-                if (msgDiv && !overallWinner) {
-                    msgDiv.innerHTML = `<div class="global-winner" style="background:#ffe0a3;">📢 Alle ${anzahlKehren} Kehren gespielt! Bitte auf "Spiel gewinnen" klicken. 📢</div>`;
-                }
+        }
+        if (allFilled && !overallWinner) {
+            const msgDiv = document.getElementById('globalWinnerMsg');
+            if (msgDiv && !overallWinner) {
+                msgDiv.innerHTML = `<div class="global-winner" style="background:#ffe0a3;">📢 Alle ${anzahlKehren} Kehren gespielt! Bitte auf "Spiel gewinnen" klicken. 📢</div>`;
             }
         } else {
-            // Nachricht entfernen wenn nicht alle voll
             const msgDiv = document.getElementById('globalWinnerMsg');
             if (msgDiv && !overallWinner && msgDiv.innerHTML.includes("Alle Kehren gespielt")) {
                 msgDiv.innerHTML = '';
             }
         }
+        updateKehrenColors();
     }
 
     function updateCenterUI() {
@@ -540,7 +615,6 @@
             lockInfoMitte.style.display = 'inline-block';
             document.body.classList.add('game-finished');
         } else {
-            // Nur anzeigen wenn nicht alle Kehren voll sind (sonst überschreiben wir die Nachricht nicht)
             const allFilled = (() => {
                 for (let i = 0; i < anzahlKehren; i++) {
                     if (teamAPunkte[i] === 0 && teamBPunkte[i] === 0) return false;
@@ -548,9 +622,7 @@
                 return true;
             })();
             if (!allFilled) {
-                if (globalWinnerMsgDiv.innerHTML.includes("Alle Kehren gespielt")) {
-                    // behalten
-                } else {
+                if (!globalWinnerMsgDiv.innerHTML.includes("Alle Kehren gespielt")) {
                     globalWinnerMsgDiv.innerHTML = '';
                 }
             }
@@ -605,13 +677,10 @@
     document.getElementById('timerResetBtn').onclick = () => resetTimer();
     document.getElementById('timerPauseBtn').onclick = () => pauseTimer();
 
-    // Punkte-Logik: Nach EINEM Punkteeintrag (egal von wem) wird automatisch zur nächsten Kehre gewechselt
+    // Punkte-Logik
     function setPoints(team, kehreIdx, punkte) {
         if (overallWinner) { showToast("Spiel beendet – neues Spiel starten"); return; }
         if (punkte>=1 && punkte<=4) {
-            // Prüfe ob diese Kehre bereits Punkte hat (von einer Mannschaft)
-            const hatBereitsPunkte = (teamAPunkte[kehreIdx] !== 0 || teamBPunkte[kehreIdx] !== 0);
-            
             let old = (team==='A') ? teamAPunkte[kehreIdx] : teamBPunkte[kehreIdx];
             if (old !== punkte) {
                 if (team==='A') teamAPunkte[kehreIdx] = punkte;
@@ -621,8 +690,6 @@
                 renderFullSidePanels();
                 updateCenterUI();
                 
-                // Automatischer Wechsel zur nächsten Kehre (weil nur eine Mannschaft pro Kehre punkten kann)
-                // Finde die nächste freie Kehre (wo beide Teams 0 haben)
                 let nextFree = -1;
                 for (let i = kehreIdx + 1; i < anzahlKehren; i++) {
                     if (teamAPunkte[i] === 0 && teamBPunkte[i] === 0) {
@@ -632,28 +699,20 @@
                 }
                 
                 if (nextFree !== -1) {
-                    // Es gibt eine nächste Kehre
                     showToast(`⏩ Weiter zu Kehre ${nextFree+1}`, 1500);
-                    if (nextFree + 1 <= anzahlKehren) {
-                        // Aktualisiere Anzeige
-                        updateKehreDisplay();
-                    }
+                    updateKehreDisplay();
                 } else {
-                    // Keine nächste Kehre mehr - alle sind gespielt
-                    if (kehreIdx + 1 >= anzahlKehren || (teamAPunkte[kehreIdx] !== 0 || teamBPunkte[kehreIdx] !== 0)) {
-                        // Prüfe ob alle Kehren gespielt sind
-                        let allFilled = true;
-                        for (let i = 0; i < anzahlKehren; i++) {
-                            if (teamAPunkte[i] === 0 && teamBPunkte[i] === 0) {
-                                allFilled = false;
-                                break;
-                            }
+                    let allFilled = true;
+                    for (let i = 0; i < anzahlKehren; i++) {
+                        if (teamAPunkte[i] === 0 && teamBPunkte[i] === 0) {
+                            allFilled = false;
+                            break;
                         }
-                        if (allFilled && !overallWinner) {
-                            showToast(`🏁 Alle ${anzahlKehren} Kehren gespielt! Bitte Spiel auswerten.`, 3000);
-                            speakText(`Alle Kehren gespielt. Bitte Spiel auswerten.`);
-                            globalWinnerMsgDiv.innerHTML = `<div class="global-winner" style="background:#ffe0a3;">📢 Alle ${anzahlKehren} Kehren gespielt! Bitte auf "Spiel gewinnen" klicken. 📢</div>`;
-                        }
+                    }
+                    if (allFilled && !overallWinner) {
+                        showToast(`🏁 Alle ${anzahlKehren} Kehren gespielt! Bitte Spiel auswerten.`, 3000);
+                        speakText(`Alle Kehren gespielt. Bitte Spiel auswerten.`);
+                        globalWinnerMsgDiv.innerHTML = `<div class="global-winner" style="background:#ffe0a3;">📢 Alle ${anzahlKehren} Kehren gespielt! Bitte auf "Spiel gewinnen" klicken. 📢</div>`;
                     }
                 }
             }
@@ -666,7 +725,6 @@
         else teamBPunkte[kehreIdx]=0;
         renderFullSidePanels();
         updateCenterUI();
-        // Lösche die "Alle Kehren gespielt" Nachricht falls vorhanden
         if (globalWinnerMsgDiv.innerHTML.includes("Alle Kehren gespielt")) {
             globalWinnerMsgDiv.innerHTML = '';
         }
@@ -805,6 +863,7 @@
             del.addEventListener('click', () => deleteKehre('B', i));
             rightPanel.appendChild(row);
         }
+        updateKehrenColors();
     }
 
     // Event Bindings
@@ -834,6 +893,7 @@
         renderFullSidePanels();
         updateCenterUI();
         initTimer();
+        startClock();
     }
     init();
 </script>
