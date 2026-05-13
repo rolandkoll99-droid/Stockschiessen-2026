@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>ESV Grein | Aktuelle & nächste Kehre | 1920x1080</title>
+    <title>ESV Grein | Aktuelle Kehre | 1920x1080</title>
     <style>
         * {
             margin: 0;
@@ -276,38 +276,40 @@
             margin-left: 12px;
         }
 
-        /* Neue Anzeige: Aktuelle & Nächste Kehre */
-        .kehre-info-container {
+        /* Zentrale Anzeige der aktuellen Kehre – groß und mittig */
+        .current-kehre-center {
             text-align: center;
-            margin-top: 10px;
-            display: flex;
-            justify-content: center;
-            gap: 30px;
-            flex-wrap: wrap;
-        }
-        .kehre-info-card {
-            background: #eef3e4;
-            border-radius: 60px;
-            padding: 10px 28px;
+            margin: 10px auto 5px auto;
+            background: linear-gradient(135deg, #eef3e4, #e2ecd6);
+            border-radius: 80px;
+            padding: 12px 24px;
             display: inline-block;
-            min-width: 200px;
+            width: auto;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
         }
-        .kehre-info-label {
-            font-size: 0.8rem;
-            font-weight: 600;
+        .current-kehre-label {
+            font-size: 0.9rem;
+            font-weight: 700;
             color: #4a6e3e;
             letter-spacing: 1px;
         }
-        .kehre-info-number {
-            font-size: 1.5rem;
+        .current-kehre-number {
+            font-size: 2.2rem;
             font-weight: 900;
             color: #1b4d1b;
-            margin-left: 10px;
             background: white;
-            padding: 2px 20px;
-            border-radius: 50px;
+            padding: 2px 28px;
+            border-radius: 70px;
             display: inline-block;
+            margin-left: 15px;
+            min-width: 90px;
         }
+        .info-wrapper {
+            display: flex;
+            justify-content: center;
+            margin-top: 8px;
+        }
+
         .global-winner {
             background: #ffecb3;
             border-radius: 60px;
@@ -419,15 +421,11 @@
             </div>
         </div>
 
-        <!-- NEU: Aktuelle Kehre & Nächste Kehre nebeneinander -->
-        <div class="kehre-info-container">
-            <div class="kehre-info-card">
-                <span class="kehre-info-label">🟢 AKTUELLE KEHRE</span>
-                <span class="kehre-info-number" id="currentKehreDisplay">—</span>
-            </div>
-            <div class="kehre-info-card">
-                <span class="kehre-info-label">⏩ NÄCHSTE KEHRE</span>
-                <span class="kehre-info-number" id="nextKehreDisplay">—</span>
+        <!-- NUR AKTUELLE KEHRE – MITTIG UND GROSS -->
+        <div class="info-wrapper">
+            <div class="current-kehre-center">
+                <span class="current-kehre-label">🟢 AKTUELLE KEHRE</span>
+                <span class="current-kehre-number" id="currentKehreDisplay">1</span>
             </div>
         </div>
 
@@ -479,51 +477,36 @@
     const stampA = document.getElementById('stampA');
     const stampB = document.getElementById('stampB');
     const currentKehreSpan = document.getElementById('currentKehreDisplay');
-    const nextKehreSpan = document.getElementById('nextKehreDisplay');
     const globalWinnerMsgDiv = document.getElementById('globalWinnerMsg');
     const lockInfoMitte = document.getElementById('lockInfoMitte');
     const timerDisplay = document.getElementById('timerDisplay');
 
     const sum = arr => arr.reduce((a,b)=>a+b,0);
 
-    // Ermittelt die aktuell gespielte Kehre (die letzte Kehre, die bereits Punkte hat, +1)
+    // Ermittelt die aktuell gespielte Kehre (diejenige, an der gerade Punkte gemacht werden können)
     function getCurrentKehre() {
-        // Finde die höchste Kehre, die bei Team A oder Team B einen Wert >0 hat
-        let maxFilled = -1;
+        if (overallWinner) return "🏆";
+        // Finde die erste Kehre, die noch nicht von BEIDEN Teams Punkte hat (also mindestens ein Team 0)
+        // Das ist die aktuelle "offene" Kehre
         for (let i = 0; i < anzahlKehren; i++) {
-            if ((teamAPunkte[i] || 0) > 0 || (teamBPunkte[i] || 0) > 0) {
-                maxFilled = i;
+            // Wenn beide Teams 0 haben -> das ist die nächste, aber auch die aktuelle (Start)
+            if (teamAPunkte[i] === 0 && teamBPunkte[i] === 0) return i + 1;
+            // Wenn ein Team Punkte hat und das andere noch nicht -> diese Kehre ist aktuell
+            if ((teamAPunkte[i] > 0 && teamBPunkte[i] === 0) || (teamBPunkte[i] > 0 && teamAPunkte[i] === 0)) {
+                return i + 1;
             }
+            // Wenn beide >0 haben, ist die Kehre abgeschlossen -> weitermachen
         }
-        // Aktuelle Kehre ist die nächste, die noch nicht vollständig gespielt ist (bzw. die, an der gerade Punkte gesammelt werden)
-        if (maxFilled === -1) return 1; // noch keine Punkte -> Kehre 1 ist aktuell
-        // Prüfe, ob die letzte gefüllte Kehre schon komplett Punkte von BEIDEN Teams hat? 
-        // Wir zeigen die Kehre an, an der gerade gepunktet wird: das ist die erste Kehre mit 0/0 oder die nächste freie
-        const nextFree = getNextFreeKehre();
-        if (nextFree === -1) return anzahlKehren; // alle voll -> letzte Kehre ist aktuell
-        return nextFree + 1; // nächste freie Kehre ist die aktuelle (weil dort noch Punkte gemacht werden können)
-    }
-
-    function getNextFreeKehre() {
-        for (let i = 0; i < anzahlKehren; i++) if (teamAPunkte[i] === 0 && teamBPunkte[i] === 0) return i;
-        return -1;
+        return anzahlKehren; // alle Kehren voll
     }
 
     function updateKehreDisplay() {
         if (overallWinner) {
             currentKehreSpan.innerText = "🏆";
-            nextKehreSpan.innerText = "🏆";
             return;
         }
         const current = getCurrentKehre();
         currentKehreSpan.innerText = current;
-        
-        const nextFree = getNextFreeKehre();
-        if (nextFree !== -1 && nextFree + 1 <= anzahlKehren) {
-            nextKehreSpan.innerText = nextFree + 1;
-        } else {
-            nextKehreSpan.innerText = "—";
-        }
     }
 
     function updateCenterUI() {
